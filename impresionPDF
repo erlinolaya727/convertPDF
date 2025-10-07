@@ -1,0 +1,231 @@
+import win32com.client as win32
+import os
+from pathlib import Path
+import pythoncom
+
+class ExcelToPdfConverter:
+    """
+    Clase para convertir archivos Excel a PDF con configuración óptima de impresión.
+    Ideal para automatización RPA.
+    """
+    
+    def __init__(self):
+        self.excel = None
+        
+    def initialize_excel(self):
+        """Inicializa la aplicación Excel"""
+        pythoncom.CoInitialize()
+        self.excel = win32.gencache.EnsureDispatch('Excel.Application')
+        self.excel.Visible = False
+        self.excel.DisplayAlerts = False
+        
+    def configure_print_settings(self, ws):
+        """
+        Configura las opciones de impresión para cada hoja
+        
+        Args:
+            ws: Objeto worksheet de Excel
+        """
+        # Configurar PageSetup
+        ps = ws.PageSetup
+        
+        # Orientación automática según contenido
+        ps.Orientation = 1  # 1=Portrait, 2=Landscape
+        
+        # Ajustar a una página de ancho
+        ps.Zoom = False
+        ps.FitToPagesWide = 1
+        ps.FitToPagesTall = False  # Permite múltiples páginas verticalmente
+        
+        # Márgenes reducidos (en puntos: 1 cm ≈ 28.35 puntos)
+        ps.LeftMargin = self.excel.CentimetersToPoints(1)
+        ps.RightMargin = self.excel.CentimetersToPoints(1)
+        ps.TopMargin = self.excel.CentimetersToPoints(1)
+        ps.BottomMargin = self.excel.CentimetersToPoints(1)
+        ps.HeaderMargin = self.excel.CentimetersToPoints(0.5)
+        ps.FooterMargin = self.excel.CentimetersToPoints(0.5)
+        
+        # Centrar en la página
+        ps.CenterHorizontally = True
+        ps.CenterVertically = False
+        
+        # Calidad de impresión
+        ps.PrintQuality = 600
+        
+        # Configurar área de impresión si no está definida
+        if ws.PageSetup.PrintArea == "":
+            # Detectar el rango usado
+            used_range = ws.UsedRange
+            ws.PageSetup.PrintArea = used_range.Address
+            
+    def optimize_for_landscape(self, ws):
+        """
+        Optimiza una hoja para orientación horizontal si tiene muchas columnas
+        
+        Args:
+            ws: Objeto worksheet de Excel
+        """
+        used_range = ws.UsedRange
+        num_cols = used_range.Columns.Count
+        num_rows = used_range.Rows.Count
+        
+        # Si hay más columnas que filas, usar landscape
+        if num_cols > num_rows or num_cols > 10:
+            ws.PageSetup.Orientation = 2  # Landscape
+            
+    def convert_excel_to_pdf(self, excel_path, pdf_path=None, optimize_orientation=True):
+        """
+        Convierte un archivo Excel completo a PDF
+        
+        Args:
+            excel_path: Ruta del archivo Excel de entrada
+            pdf_path: Ruta del archivo PDF de salida (opcional)
+            optimize_orientation: Si True, ajusta orientación según contenido
+            
+        Returns:
+            str: Ruta del archivo PDF generado
+        """
+        try:
+            # Validar que el archivo existe
+            if not os.path.exists(excel_path):
+                raise FileNotFoundError(f"No se encontró el archivo: {excel_path}")
+            
+            # Generar ruta de salida si no se proporciona
+            if pdf_path is None:
+                pdf_path = str(Path(excel_path).with_suffix('.pdf'))
+            
+            # Asegurar que la ruta es absoluta
+            excel_path = os.path.abspath(excel_path)
+            pdf_path = os.path.abspath(pdf_path)
+            
+            # Inicializar Excel si no está inicializado
+            if self.excel is None:
+                self.initialize_excel()
+            
+            # Abrir el libro
+            wb = self.excel.Workbooks.Open(excel_path)
+            
+            print(f"Procesando libro: {excel_path}")
+            print(f"Número de hojas: {wb.Worksheets.Count}")
+            
+            # Configurar cada hoja
+            for i in range(1, wb.Worksheets.Count + 1):
+                ws = wb.Worksheets(i)
+                print(f"  Configurando hoja: {ws.Name}")
+                
+                # Configurar opciones de impresión
+                self.configure_print_settings(ws)
+                
+                # Optimizar orientación si se solicita
+                if optimize_orientation:
+                    self.optimize_for_landscape(ws)
+            
+            # Exportar a PDF
+            # 0 = xlTypePDF
+            wb.ExportAsFixedFormat(0, pdf_path)
+            
+            print(f"PDF generado exitosamente: {pdf_path}")
+            
+            # Cerrar el libro sin guardar cambios
+            wb.Close(False)
+            
+            return pdf_path
+            
+        except Exception as e:
+            print(f"Error durante la conversión: {str(e)}")
+            raise
+        finally:
+            if 'wb' in locals():
+                try:
+                    wb.Close(False)
+                except:
+                    pass
+    
+    def convert_specific_sheets(self, excel_path, sheet_names, pdf_path=None):
+        """
+        Convierte hojas específicas de un Excel a PDF
+        
+        Args:
+            excel_path: Ruta del archivo Excel
+            sheet_names: Lista de nombres de hojas a incluir
+            pdf_path: Ruta del PDF de salida
+            
+        Returns:
+            str: Ruta del archivo PDF generado
+        """
+        try:
+            if not os.path.exists(excel_path):
+                raise FileNotFoundError(f"No se encontró el archivo: {excel_path}")
+            
+            if pdf_path is None:
+                pdf_path = str(Path(excel_path).with_suffix('.pdf'))
+            
+            excel_path = os.path.abspath(excel_path)
+            pdf_path = os.path.abspath(pdf_path)
+            
+            if self.excel is None:
+                self.initialize_excel()
+            
+            wb = self.excel.Workbooks.Open(excel_path)
+            
+            # Ocultar todas las hojas excepto las seleccionadas
+            for ws in wb.Worksheets:
+                if ws.Name in sheet_names:
+                    ws.Visible = True
+                    self.configure_print_settings(ws)
+                    self.optimize_for_landscape(ws)
+                else:
+                    ws.Visible = False
+            
+            # Exportar solo las hojas visibles
+            wb.ExportAsFixedFormat(0, pdf_path, IgnorePrintAreas=False)
+            
+            # Restaurar visibilidad
+            for ws in wb.Worksheets:
+                ws.Visible = True
+            
+            wb.Close(False)
+            
+            print(f"PDF generado con hojas específicas: {pdf_path}")
+            return pdf_path
+            
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            raise
+    
+    def close(self):
+        """Cierra la aplicación Excel"""
+        if self.excel:
+            self.excel.Quit()
+            self.excel = None
+            pythoncom.CoUninitialize()
+
+
+# Ejemplo de uso
+if __name__ == "__main__":
+    # Crear instancia del convertidor
+    converter = ExcelToPdfConverter()
+    
+    try:
+        # Ejemplo 1: Convertir libro completo
+        excel_file = r"C:\Users\erlin\Downloads\Datos.xlsx"
+        pdf_output = r'C:\Users\erlin\Downloads\salida.pdf'
+        
+        converter.convert_excel_to_pdf(
+            excel_path=excel_file,
+            pdf_path=pdf_output,
+            optimize_orientation=True
+        )
+        
+        # Ejemplo 2: Convertir hojas específicas
+        # converter.convert_specific_sheets(
+        #     excel_path=excel_file,
+        #     sheet_names=["Hoja1", "Hoja3"],
+        #     pdf_path="salida_especifica.pdf"
+        # )
+        
+    finally:
+        # Siempre cerrar Excel
+        converter.close()
+        
+    print("Proceso completado")

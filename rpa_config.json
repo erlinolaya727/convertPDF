@@ -1,0 +1,30 @@
+{
+  "excel": {
+    "timeout_seconds": 300,
+    "retry_attempts": 3,
+    "retry_delay": 5,
+    "visible": false,
+    "display_alerts": false
+  },
+  "pdf": {
+    "default_quality": 600,
+    "default_orientation": "auto",
+    "margins_cm": 1.0,
+    "fit_to_width": true
+  },
+  "rpa": {
+    "exit_codes": {
+      "success": 0,
+      "file_not_found": 1,
+      "excel_error": 2,
+      "timeout": 3,
+      "permission_error": 4,
+      "general_error": 99
+    },
+    "log_level": "INFO"
+  },
+  "cleanup": {
+    "kill_orphaned_excel": true,
+    "max_excel_processes": 5
+  }
+}
